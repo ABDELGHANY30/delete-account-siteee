@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حذف الحساب</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --text:#1c1e21; --muted:#6b7280;
+    --primary:#dc2626; --primary-dark:#b91c1c; --border:#e5e7eb; --ok:#16a34a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font-family:"Segoe UI", Tahoma, Arial, sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:32px; width:100%; max-width:420px; box-shadow:0 2px 10px rgba(0,0,0,.05);
+  }
+  h1{font-size:20px; margin:0 0 8px}
+  p.desc{color:var(--muted); font-size:14px; line-height:1.7; margin:0 0 24px}
+  label{display:block; font-size:14px; margin-bottom:6px; font-weight:600}
+  input{
+    width:100%; padding:11px 12px; border:1px solid var(--border); border-radius:8px;
+    font-size:15px; margin-bottom:16px; background:#fafafa;
+  }
+  input:focus{outline:none; border-color:var(--primary); background:#fff}
+  .warn{
+    background:#fef2f2; border:1px solid #fecaca; color:#991b1b;
+    padding:12px 14px; border-radius:8px; font-size:13px; margin-bottom:20px; line-height:1.6;
+  }
+  button{
+    width:100%; padding:13px; border:none; border-radius:8px; background:var(--primary);
+    color:#fff; font-size:15px; font-weight:700; cursor:pointer;
+  }
+  button:hover{background:var(--primary-dark)}
+  button:disabled{background:#f3a6a6; cursor:not-allowed}
+  .msg{margin-top:16px; font-size:14px; padding:12px 14px; border-radius:8px; display:none; line-height:1.6}
+  .msg.success{display:block; background:#f0fdf4; border:1px solid #bbf7d0; color:var(--ok)}
+  .msg.error{display:block; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c}
+  footer{margin-top:22px; font-size:12px; color:var(--muted); text-align:center}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>طلب حذف الحساب</h1>
+  <p class="desc">
+    من هنا تقدر تطلب حذف حسابك وبياناتك المرتبطة بيه بشكل نهائي، حتى لو مش محمّل التطبيق حاليًا.
+  </p>
+
+  <div class="warn">
+    تنبيه: الحذف نهائي ومش قابل للتراجع. هيتم حذف بياناتك الشخصية وسجلاتك المرتبطة بالحساب.
+  </div>
+
+  <form id="deleteForm">
+    <label for="email">البريد الإلكتروني</label>
+    <input type="email" id="email" required placeholder="example@email.com">
+
+    <label for="password">كلمة المرور</label>
+    <input type="password" id="password" required placeholder="••••••••">
+
+    <button type="submit" id="submitBtn">حذف الحساب نهائيًا</button>
+  </form>
+
+  <div class="msg" id="msgBox"></div>
+
+  <footer>لو واجهتك مشكلة، تواصل معنا على support@yourdomain.com</footer>
+</div>
+
+<script>
+  // عدّل الرابط ده ليطابق دومين الـ backend بتاعك
+  const API_BASE_URL = "https://poultry-fastapi-backend.onrender.com";
+
+  const form = document.getElementById("deleteForm");
+  const btn = document.getElementById("submitBtn");
+  const msgBox = document.getElementById("msgBox");
+
+  function showMsg(text, type){
+    msgBox.textContent = text;
+    msgBox.className = "msg " + type;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    if(!confirm("متأكد إنك عايز تحذف حسابك نهائيًا؟ الخطوة دي مش قابلة للتراجع.")) return;
+
+    btn.disabled = true;
+    btn.textContent = "جاري تسجيل الدخول...";
+    msgBox.className = "msg";
+
+    try {
+      // 1) تسجيل دخول عشان نجيب التوكن (الفورم مش داخل التطبيق فمفيش توكن جاهز)
+      const loginRes = await fetch(`${API_BASE_URL}/api/v1/auth/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      if(!loginRes.ok){
+        throw new Error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+      }
+      const loginData = await loginRes.json();
+      const token = loginData.access_token;
+
+      // 2) حذف الحساب فعليًا
+      btn.textContent = "جاري حذف الحساب...";
+      const delRes = await fetch(`${API_BASE_URL}/api/v1/auth/auth/me`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ password })
+      });
+
+      if(delRes.status === 204 || delRes.ok){
+        showMsg("تم حذف حسابك وبياناتك بنجاح.", "success");
+        form.reset();
+        form.style.display = "none";
+      } else if(delRes.status === 401){
+        throw new Error("كلمة المرور غير صحيحة");
+      } else {
+        throw new Error("حصل خطأ أثناء الحذف، حاول مرة أخرى أو تواصل مع الدعم.");
+      }
+
+    } catch(err){
+      showMsg(err.message || "حصل خطأ غير متوقع.", "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "حذف الحساب نهائيًا";
+    }
+  });
+</script>
+
+</body>
+</html>
